@@ -1,0 +1,10 @@
+# Python dependencies for the snowflake2snowflake pipeline.
+# Install ONCE:  python3 bootstrap.py   (or the VS Code task "S2S: Setup — install deps (run once)")
+# bootstrap.py is idempotent: if these already import, it exits instantly and
+# does NOT reinstall — so it is safe to leave in the validate chain.
+
+sqlglot>=25.0            # Stage-4 offline SQL parser/validator (the slow one to fetch)
+
+# Optional — only needed to validate against a LIVE Snowflake account.
+# Uncomment if you have credentials; the pipeline works offline without it.
+# snowflake-connector-python>=3.10

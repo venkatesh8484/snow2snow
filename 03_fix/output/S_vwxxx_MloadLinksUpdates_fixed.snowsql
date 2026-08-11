@@ -1,0 +1,51 @@
+-- FIX LOG (issues repaired during remediation)
+-- [KEEP] SNZ-01 line 18: template tag `<% ctx.env.S_vw6122_CompareLinksRecordsWithTeradata_Current_date %>` preserved verbatim (inside TO_DATE(...,'DDMONYY'))
+-- [DEF-07] line 13: subquery alias `IN_DEP_GMTFLIGHT_FLIGHT_DT` -> `IN_DEP_FLIGHT_DT` (find/replace drift; outer WHERE line 31 and NOT EXISTS guard line 38 already use IN_DEP_FLIGHT_DT, so the alias was the outlier). TODO(SME): confirm alias rename matches staging column grain.
+-- [DEF-07] line 2 vs 33: UPDATE target `BASE.FLT_FOLDERLINKS` vs NOT EXISTS guard `BASE.FLIGHT_FOLDERLINKS` — different names. NOT renamed (no ground truth). TODO(SME): are these the same table?
+-- [SEM-03] lines 26-32, 34-41: multi-key join + anti-join on suspected CHAR(n) keys. TODO(SME): if any of the 9 keys are CHAR(n), wrap both sides in RTRIM().
+-- [SEM-06] line 18: `TO_DATE('<% ... %>','DDMONYY')` locale-dependent MON mask. TODO(SME): confirm orchestrator date matches 'DDMONYY' and session locale matches source.
+-- [SEM-08] lines 16, 20: IFF NULL-handling — TO_CHAR(NULL) -> NULL <> '20501231' -> NULL (false-branch); ACTION_CODE NULL -> 'N'. TODO(SME): confirm NULL paths match Teradata intent.
+-- [SEM-10] lines 26-32: join-key grain/direction. TODO(SME): confirm the 7 OLD_* staging columns map 1:1 to tgt BASE columns by grain.
+
+UPDATE BASE.FLT_FOLDERLINKS tgt
+SET
+    LINK_EXPIRY_DT  = src.LINK_EXPIRY_DT,
+    CURRENT_REC_IND = src.CURRENT_REC_IND
+FROM (
+    SELECT
+        OLD_LINK_STATION_CD       AS LINK_STATION_CD,
+        OLD_IN_ORIGN_STATION_CD   AS IN_ORIGN_STATION_CD,
+        OLD_IN_ALN_CD         AS IN_ALN_CD,
+        OLD_IN_FLIGHT_NO         AS IN_FLIGHT_NO,
+        OLD_IN_FLIGHT_SFX_CD     AS IN_FLIGHT_SFX_CD,
+        OLD_IN_DEP_FLIGHT_DT AS IN_DEP_FLIGHT_DT,  -- [DEF-07] alias renamed from IN_DEP_GMTFLIGHT_FLIGHT_DT; TODO(SME): confirm grain
+        OLD_LINK_EFFECTIVE_DT AS LINK_EFFECTIVE_DT,
+        IFF(  -- TODO(SME) SEM-08: NULL path in TO_CHAR/IFF falls to false-branch
+            TO_CHAR(OLD_LINK_EXPIRY_DT,'YYYYMMDD') <> '20501231',
+            OLD_LINK_EXPIRY_DT,
+            DATEADD(DAY,-1,TO_DATE('<% ctx.env.S_vw6122_CompareLinksRecordsWithTeradata_Current_date %>','DDMONYY'))  -- [KEEP] SNZ-01; TODO(SME) SEM-06: locale mask
+        ) AS LINK_EXPIRY_DT,
+        IFF(ACTION_CODE = 'U','Y','N') AS CURRENT_REC_IND  -- TODO(SME) SEM-08: NULL ACTION_CODE -> 'N'
+    FROM STAGING.Rtr_DirectFlowOfLinksRecords
+    WHERE ACTION_CODE IN ('U','B')
+) src
+WHERE tgt.LINK_STATION_CD       = src.LINK_STATION_CD  -- TODO(SME) SEM-03/SEM-10: CHAR(n) padding + grain
+  AND tgt.IN_ORIGN_STATION_CD   = src.IN_ORIGN_STATION_CD
+  AND tgt.IN_ALN_CD         = src.IN_ALN_CD
+  AND tgt.IN_FLIGHT_NO         = src.IN_FLIGHT_NO
+  AND tgt.IN_FLIGHT_SFX_CD     = src.IN_FLIGHT_SFX_CD
+  AND tgt.IN_DEP_FLIGHT_DT = src.IN_DEP_FLIGHT_DT
+  AND tgt.LINK_EFFECTIVE_DT = src.LINK_EFFECTIVE_DT
+  AND NOT EXISTS (
+        SELECT 1
+        FROM BASE.FLIGHT_FOLDERLINKS x  -- TODO(SME) DEF-07: same table as UPDATE target BASE.FLT_FOLDERLINKS?
+        WHERE x.LINK_STATION_CD       = tgt.LINK_STATION_CD  -- TODO(SME) SEM-03: CHAR(n) padding
+          AND x.IN_ORIGN_STATION_CD   = tgt.IN_ORIGN_STATION_CD
+          AND x.IN_ALN_CD         = tgt.IN_ALN_CD
+          AND x.IN_FLIGHT_NO         = tgt.IN_FLIGHT_NO
+          AND x.IN_FLIGHT_SFX_CD     = tgt.IN_FLIGHT_SFX_CD
+          AND x.IN_DEP_FLIGHT_DT = tgt.IN_DEP_FLIGHT_DT
+          AND x.LINK_EFFECTIVE_DT = tgt.LINK_EFFECTIVE_DT
+          AND x.LINK_EXPIRY_DT    = src.LINK_EXPIRY_DT
+          AND x.CURRENT_REC_IND   = src.CURRENT_REC_IND
+  );

@@ -1,0 +1,108 @@
+
+-- <<< SEMANTIC EXPLANATION (generated from 06_explain — edit the .md, not here)
+-- Source of truth: 06_explain/output/semantic_S_vwxxx_MloadLinksUpdates.md
+--
+-- PURPOSE
+-- `S_vwxxx_MloadLinksUpdates.snowsql` is a single `UPDATE … FROM (subquery)`
+-- statement that **expires** link rows in `BASE.FLT_FOLDERLINKS` (the UPDATE
+-- target, alias `tgt`). It reads "old" link records from the staging table
+-- `STAGING.Rtr_DirectFlowOfLinksRecords` (subquery alias `src`), filtered to
+-- rows whose `ACTION_CODE` is `'U'` (update) or `'B'` (both). For each such
+-- record it sets `LINK_EXPIRY_DT` and `CURRENT_REC_IND` on the matching base
+-- row. The `LINK_EXPIRY_DT` is computed with an `IFF`: if the old expiry is not
+-- the sentinel `'20501231'`, keep it; otherwise replace it with the day before
+-- an orchestrator-supplied current date (a `<% ctx.env.* %>` template tag). The
+-- `CURRENT_REC_IND` is set to `'Y'` when `ACTION_CODE = 'U'`, else `'N'`. A `NOT
+-- EXISTS` anti-join guard prevents the update from firing if a row with the same
+-- key + new expiry/indicator already exists in `BASE.FLIGHT_FOLDERLINKS` (a
+-- table whose name differs from the UPDATE target — an open DEF-07 SME
+-- question). The grain of one updated row is one link identity (7 keys).
+--
+-- ---
+--
+-- OPEN SME QUESTIONS
+-- 1. **DEF-07 (table name).** Is `BASE.FLIGHT_FOLDERLINKS` (line 33, the `NOT
+--    EXISTS` guard table) the same table as the UPDATE target
+--    `BASE.FLT_FOLDERLINKS` (line 2)? If not, is the guard intended to protect a
+--    *different* table? Do not rename either without ground truth.
+-- 2. **DEF-07 (alias rename confirmation).** Confirm the renamed alias
+--    `IN_DEP_FLIGHT_DT` matches the staging column `OLD_IN_DEP_FLIGHT_DT` by grain
+--    (the rename aligns the alias with the outer scope; the grain itself is still
+--    unprovable without DDL).
+-- 3. **SEM-03 — `CHAR(n)` padding.** Are any of the 9 join/anti-join keys
+--    `CHAR(n)` (`LINK_STATION_CD`, `IN_ORIGN_STATION_CD`, `IN_ALN_CD`,
+--    `IN_FLIGHT_SFX_CD`, `CURRENT_REC_IND`, …)? If so, wrap both sides of each
+--    predicate in `RTRIM()`.
+-- 4. **SEM-06 — `'DDMONYY'` locale mask.** Does the orchestrator-supplied `<%
+--    ctx.env.S_vw6122_…_Current_date %>` value match the `'DDMONYY'` format, and
+--    does the session locale match the source? `MON` is locale-dependent.
+-- 5. **SEM-08 — `IFF` NULL paths.** (a) If `OLD_LINK_EXPIRY_DT` is NULL, the
+--    first `IFF` falls to the `DATEADD(...)` false-branch — is that the intended
+--    behaviour? (b) If `ACTION_CODE` is NULL, the second `IFF` returns `'N'` — is
+--    that the intended behaviour?
+-- 6. **SEM-10 — join-key grain.** Do the 7 `OLD_*` staging columns map 1:1 to
+--    the `tgt` BASE columns by grain? Confirm against Teradata ground truth.
+--
+-- ---
+-- >>> SEMANTIC EXPLANATION
+
+-- FIX LOG (issues repaired during remediation)
+-- [KEEP] SNZ-01 line 18: template tag `<% ctx.env.S_vw6122_CompareLinksRecordsWithTeradata_Current_date %>` preserved verbatim (inside TO_DATE(...,'DDMONYY'))
+-- [DEF-07] line 13: subquery alias `IN_DEP_GMTFLIGHT_FLIGHT_DT` -> `IN_DEP_FLIGHT_DT` (find/replace drift; outer WHERE line 31 and NOT EXISTS guard line 38 already use IN_DEP_FLIGHT_DT, so the alias was the outlier). TODO(SME): confirm alias rename matches staging column grain.
+-- [DEF-07] line 2 vs 33: UPDATE target `BASE.FLT_FOLDERLINKS` vs NOT EXISTS guard `BASE.FLIGHT_FOLDERLINKS` — different names. NOT renamed (no ground truth). TODO(SME): are these the same table?
+-- [SEM-03] lines 26-32, 34-41: multi-key join + anti-join on suspected CHAR(n) keys. TODO(SME): if any of the 9 keys are CHAR(n), wrap both sides in RTRIM().
+-- [SEM-06] line 18: `TO_DATE('<% ... %>','DDMONYY')` locale-dependent MON mask. TODO(SME): confirm orchestrator date matches 'DDMONYY' and session locale matches source.
+-- [SEM-08] lines 16, 20: IFF NULL-handling — TO_CHAR(NULL) -> NULL <> '20501231' -> NULL (false-branch); ACTION_CODE NULL -> 'N'. TODO(SME): confirm NULL paths match Teradata intent.
+-- [SEM-10] lines 26-32: join-key grain/direction. TODO(SME): confirm the 7 OLD_* staging columns map 1:1 to tgt BASE columns by grain.
+
+-- SEM ▸ DEF-07 (table name): UPDATE target is FLT_FOLDERLINKS; the NOT EXISTS guard uses FLIGHT_FOLDERLINKS — confirm same table
+UPDATE BASE.FLT_FOLDERLINKS tgt
+SET
+    LINK_EXPIRY_DT  = src.LINK_EXPIRY_DT,
+    CURRENT_REC_IND = src.CURRENT_REC_IND
+FROM (
+    SELECT
+        OLD_LINK_STATION_CD       AS LINK_STATION_CD,
+        OLD_IN_ORIGN_STATION_CD   AS IN_ORIGN_STATION_CD,
+        OLD_IN_ALN_CD         AS IN_ALN_CD,
+        OLD_IN_FLIGHT_NO         AS IN_FLIGHT_NO,
+        OLD_IN_FLIGHT_SFX_CD     AS IN_FLIGHT_SFX_CD,
+        -- SEM ▸ DEF-07 (alias): renamed from IN_DEP_GMTFLIGHT_FLIGHT_DT to align with outer WHERE (line 31) and NOT EXISTS guard (line 38)
+        OLD_IN_DEP_FLIGHT_DT AS IN_DEP_FLIGHT_DT,  -- [DEF-07] alias renamed from IN_DEP_GMTFLIGHT_FLIGHT_DT; TODO(SME): confirm grain
+        OLD_LINK_EFFECTIVE_DT AS LINK_EFFECTIVE_DT,
+        -- SEM ▸ SEM-08: IFF NULL path — TO_CHAR(NULL) or NULL ACTION_CODE falls to the false-branch; confirm intent
+        IFF(  -- TODO(SME) SEM-08: NULL path in TO_CHAR/IFF falls to false-branch
+            -- SEM ▸ SEM-08: if OLD_LINK_EXPIRY_DT is NULL, NULL <> '20501231' is NULL -> IFF false-branch (DATEADD)
+            TO_CHAR(OLD_LINK_EXPIRY_DT,'YYYYMMDD') <> '20501231',
+            OLD_LINK_EXPIRY_DT,
+            -- SEM ▸ SNZ-01 template tag preserved verbatim; SEM-06: 'DDMONYY' locale-dependent MON mask
+            DATEADD(DAY,-1,TO_DATE('<% ctx.env.S_vw6122_CompareLinksRecordsWithTeradata_Current_date %>','DDMONYY'))  -- [KEEP] SNZ-01; TODO(SME) SEM-06: locale mask
+        ) AS LINK_EXPIRY_DT,
+        -- SEM ▸ SEM-08: NULL ACTION_CODE -> '= U' is NULL -> IFF false-branch 'N'; confirm intent
+        IFF(ACTION_CODE = 'U','Y','N') AS CURRENT_REC_IND  -- TODO(SME) SEM-08: NULL ACTION_CODE -> 'N'
+    FROM STAGING.Rtr_DirectFlowOfLinksRecords
+    -- SEM ▸ subquery filter keeps update/both records only
+    WHERE ACTION_CODE IN ('U','B')
+) src
+-- SEM ▸ SEM-03/SEM-10: first of 7 join keys; CHAR(n) padding + grain confirmation needed
+WHERE tgt.LINK_STATION_CD       = src.LINK_STATION_CD  -- TODO(SME) SEM-03/SEM-10: CHAR(n) padding + grain
+  AND tgt.IN_ORIGN_STATION_CD   = src.IN_ORIGN_STATION_CD
+  AND tgt.IN_ALN_CD         = src.IN_ALN_CD
+  AND tgt.IN_FLIGHT_NO         = src.IN_FLIGHT_NO
+  AND tgt.IN_FLIGHT_SFX_CD     = src.IN_FLIGHT_SFX_CD
+  AND tgt.IN_DEP_FLIGHT_DT = src.IN_DEP_FLIGHT_DT
+  AND tgt.LINK_EFFECTIVE_DT = src.LINK_EFFECTIVE_DT
+  AND NOT EXISTS (
+        SELECT 1
+        -- SEM ▸ DEF-07 (table name): guard table name differs from UPDATE target — confirm same table
+        FROM BASE.FLIGHT_FOLDERLINKS x  -- TODO(SME) DEF-07: same table as UPDATE target BASE.FLT_FOLDERLINKS?
+        WHERE x.LINK_STATION_CD       = tgt.LINK_STATION_CD  -- TODO(SME) SEM-03: CHAR(n) padding
+          AND x.IN_ORIGN_STATION_CD   = tgt.IN_ORIGN_STATION_CD
+          AND x.IN_ALN_CD         = tgt.IN_ALN_CD
+          AND x.IN_FLIGHT_NO         = tgt.IN_FLIGHT_NO
+          AND x.IN_FLIGHT_SFX_CD     = tgt.IN_FLIGHT_SFX_CD
+          AND x.IN_DEP_FLIGHT_DT = tgt.IN_DEP_FLIGHT_DT
+          AND x.LINK_EFFECTIVE_DT = tgt.LINK_EFFECTIVE_DT
+          AND x.LINK_EXPIRY_DT    = src.LINK_EXPIRY_DT
+          AND x.CURRENT_REC_IND   = src.CURRENT_REC_IND
+  );

@@ -1,0 +1,162 @@
+-- FIX LOG (issues repaired during remediation)
+-- =================================================================================
+-- Input : 00_input/S_vwxxx_MloadLinksInserts.snowsql (109 lines)
+-- Output: 03_fix/output/S_vwxxx_MloadLinksInserts_fixed.snowsql
+-- Dialect: Snowflake | Input extension .snowsql retained (SNZ-* rules apply)
+-- Teradata ground truth: NOT supplied (no 00_input/S_vwxxx_MloadLinksInserts.teradata.sql)
+-- =================================================================================
+-- MECHANICAL FIXES: 0
+--   The file is parse-clean Snowflake. No SFX-*/FNX-*/DTX-*/DEF-* rules fired.
+--   Column count: INSERT 33 = SELECT 33 (PASS, no DEF-05). No DEF-01 duplicates.
+--   No residual Teradata constructs. No QUALIFY/division (SFX-03/SEM-01 n/a).
+-- =================================================================================
+-- [KEEP] SNZ-* : SNZ inventory empty (no <% %> tags, no PUT/GET, no stage DML).
+--                 .snowsql extension retained so validator snowsql_protect.py
+--                 masking path applies consistently (per 2026-07-24 lesson).
+-- =================================================================================
+-- SME (semantic) findings — flagged inline as -- TODO(SME), NOT mechanically
+-- rewritten. All blocked on missing DDL for BASE.FLT_FOLDER_LINKS and
+-- STAGING.ExpFinalyseInserts. No Teradata ground truth to diff against.
+--   [SME] SEM-03  : CHAR(n) padding drift in the full-row NOT EXISTS anti-join
+--                   (all 33 T.col = S.NEW_col predicates). Teradata blank-pads
+--                   CHAR(n) and ignores trailing spaces in '='; Snowflake does
+--                   not. Requires DDL to identify CHAR(n) columns; if any, wrap
+--                   both sides of each such predicate in RTRIM/TRIM.
+--   [SME] SEM-06 / DTX-10 : 12 SELECT aliases carry _SMALLINT/_DATE suffixes
+--                   (NEW_IN_FLT_NO_SMALLINT, NEW_*_FLTDT_DATE, NEW_*_FLTTM_DATE,
+--                   NEW_*_SMALLINT). Suffix describes the staging cast, NOT the
+--                   target column type. NOT EXISTS predicates compare these
+--                   against unknown BASE column types — a mismatch could
+--                   silently change anti-join suppression or raise a strict-
+--                   cast error. Requires DDL for both sides.
+--   [SME] SEM-04  : Timezone risk on _TTM time columns (IN_ARR_FLTTM,
+--                   OUT_DEP_FLTTM) loaded from _DATE-suffixed staging values.
+--                   If staging cast produced TIMESTAMP(_TZ) and target is
+--                   TIME/TIMESTAMP_NTZ, a session-TIMEZONE shift could move
+--                   values. Confirm staging cast + target type; pin session
+--                   TIMEZONE or use TIMESTAMP_NTZ explicitly if needed.
+--   [SME] SEM-05  : SET vs MULTISET on BASE.FLT_FOLDER_LINKS cannot be decided
+--                   from the SQL alone (no CREATE TABLE DDL supplied). The
+--                   NOT EXISTS full-row anti-join emulates Teradata SET-table
+--                   "drop rows already present" semantics. If target is SET,
+--                   the NOT EXISTS is harmless belt-and-suspenders; if
+--                   MULTISET, it is the only dedup mechanism (load-bearing).
+--                   SME question: "Is BASE.FLT_FOLDER_LINKS a SET table?"
+-- =================================================================================
+-- NULL-guard note (preserved as-is): WHERE S.IN_FLT_LEG_SEQ_NO IS NOT NULL AND
+-- S.OUT_FLT_LEG_SEQ_NO IS NOT NULL filters NULL leg-sequence rows before the
+-- anti-join. The remaining 31 columns are NOT NULL-guarded; standard anti-join
+-- NULL semantics apply (a NULL staging value makes its predicate NULL => row
+-- treated as non-matching => inserted). Flagged for SME confirmation that no
+-- other key column should be NULL-guarded.
+-- =================================================================================
+
+INSERT INTO BASE.FLT_FOLDER_LINKS ( -- TODO(SME) SEM-05: SET vs non-SET (multi-row) on this target unknown (no DDL); NOT EXISTS below is the dedup mechanism — confirm whether SET-table dedup also applies.
+    LINK_STATION_CD,
+    IN_ORIGN_STATION_CD,
+    IN_ALN_CD,
+    IN_FLT_NO,
+    IN_FLT_SFX_CD,
+    IN_DEP_FLTDT,
+    IN_ARR_FLTDT,
+    IN_ARR_FLTTM,
+    IN_PAX_TML_CD,
+    IN_GROUND_ACY_CD,
+    IN_SERVICE_TYP,
+    IN_FLT_LEG_SEQ_NO,
+    OUT_DESTATION_STATION_CD,
+    OUT_ALN_CD,
+    OUT_FLT_NO,
+    OUT_FLT_SFX_CD,
+    OUT_DEP_FLTDT,
+    OUT_DEP_FLTTM,
+    OUT_ARR_FLTDT,
+    OUT_PAX_TML_CD,
+    OUT_GROUND_ACY_CD,
+    OUT_SERVICE_TYP,
+    OUT_FLT_LEG_SEQ_NO,
+    AIRCRAFT_OWNER_CD,
+    CARRIER_AC_TYP,
+    MIDNIGHT_QTY,
+    BUFFER_DUR,
+    STD_WORKING_DUR,
+    TOW_TIME_DUR,
+    FIXED_LINK_RSN_TXT,
+    LINK_EFFECTIVE_DT,
+    LINK_EXPIRY_DT,
+    CURRENT_REC_IND
+)
+SELECT
+    NEW_LINK_STATION_CD,
+    NEW_IN_ORIGN_STATION_CD,
+    NEW_IN_ALN_CD,
+    NEW_IN_FLT_NO_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast, not target type; confirm IN_FLT_NO type compatibility vs BASE column.
+    NEW_IN_FLT_SFX_CD,
+    NEW_IN_DEP_FLTDT_DATE, -- TODO(SME) SEM-06/DTX-10: _DATE suffix = staging cast; confirm IN_DEP_FLTDT type compatibility.
+    NEW_IN_ARR_FLTDT_DATE, -- TODO(SME) SEM-06/DTX-10: _DATE suffix = staging cast; confirm IN_ARR_FLTDT type compatibility.
+    NEW_IN_ARR_FLTTM_DATE, -- TODO(SME) SEM-06/DTX-10 + SEM-04: _DATE suffix on a _TTM (time) slot; confirm staging cast + target type (TIME vs TIMESTAMP vs DATE) and timezone handling.
+    NEW_IN_PAX_TML_CD,
+    NEW_IN_GROUND_ACY_CD,
+    NEW_IN_SERVICE_TYP,
+    NEW_IN_FLT_LEG_SEQ_NO,
+    NEW_OUT_DESTATION_STATION_CD,
+    NEW_OUT_ALN_CD,
+    NEW_OUT_FLT_NO_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast; confirm OUT_FLT_NO type compatibility.
+    NEW_OUT_FLT_SFX_CD,
+    NEW_OUT_DEP_FLTDT_DATE, -- TODO(SME) SEM-06/DTX-10: _DATE suffix = staging cast; confirm OUT_DEP_FLTDT type compatibility.
+    NEW_OUT_DEP_FLTTM_DATE, -- TODO(SME) SEM-06/DTX-10 + SEM-04: _DATE suffix on a _TTM (time) slot; confirm staging cast + target type and timezone handling.
+    NEW_OUT_ARR_FLTDT_DATE, -- TODO(SME) SEM-06/DTX-10: _DATE suffix = staging cast; confirm OUT_ARR_FLTDT type compatibility.
+    NEW_OUT_PAX_TML_CD,
+    NEW_OUT_GROUND_ACY_CD,
+    NEW_OUT_SERVICE_TYP,
+    NEW_OUT_FLT_LEG_SEQ_NO,
+    NEW_AIRCRAFT_OWNER_CD,
+    NEW_CARRIER_AC_TYP,
+    NEW_MIDNIGHT_QTY_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast; confirm MIDNIGHT_QTY type compatibility.
+    NEW_BUFFER_DUR_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast; confirm BUFFER_DUR type compatibility.
+    NEW_STD_WORKING_DUR_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast; confirm STD_WORKING_DUR type compatibility.
+    NEW_TOW_TIME_DUR_SMALLINT, -- TODO(SME) SEM-06/DTX-10: _SMALLINT suffix = staging cast; confirm TOW_TIME_DUR type compatibility.
+    NEW_FIXED_LINK_RSN_TXT,
+    NEW_LINK_EFFECTIVE_DT,
+    NEW_LINK_EXPIRY_DT,
+    NEW_CURRENT_REC_IND
+FROM STAGING.ExpFinalyseInserts S
+WHERE S.IN_FLT_LEG_SEQ_NO IS NOT NULL
+  AND S.OUT_FLT_LEG_SEQ_NO IS NOT NULL
+  AND NOT EXISTS ( -- TODO(SME) SEM-03: full-row anti-join equates all 33 columns; CHAR(n) padding drift (Teradata pads, Snowflake does not) can silently change which rows are suppressed. Requires DDL to identify CHAR(n) columns; if any, wrap both sides in RTRIM/TRIM.
+        SELECT 1
+        FROM BASE.FLT_FOLDER_LINKS T
+        WHERE T.LINK_STATION_CD = S.NEW_LINK_STATION_CD
+          AND T.IN_ORIGN_STATION_CD = S.NEW_IN_ORIGN_STATION_CD
+          AND T.IN_ALN_CD = S.NEW_IN_ALN_CD
+          AND T.IN_FLT_NO = S.NEW_IN_FLT_NO_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.IN_FLT_SFX_CD = S.NEW_IN_FLT_SFX_CD
+          AND T.IN_DEP_FLTDT = S.NEW_IN_DEP_FLTDT_DATE -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.IN_ARR_FLTDT = S.NEW_IN_ARR_FLTDT_DATE -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.IN_ARR_FLTTM = S.NEW_IN_ARR_FLTTM_DATE -- TODO(SME) SEM-06/DTX-10 + SEM-04: _TTM time slot vs _DATE-suffixed staging value; confirm type + timezone.
+          AND T.IN_PAX_TML_CD = S.NEW_IN_PAX_TML_CD
+          AND T.IN_GROUND_ACY_CD = S.NEW_IN_GROUND_ACY_CD
+          AND T.IN_SERVICE_TYP = S.NEW_IN_SERVICE_TYP
+          AND T.IN_FLT_LEG_SEQ_NO = S.NEW_IN_FLT_LEG_SEQ_NO
+          AND T.OUT_DESTATION_STATION_CD = S.NEW_OUT_DESTATION_STATION_CD
+          AND T.OUT_ALN_CD = S.NEW_OUT_ALN_CD
+          AND T.OUT_FLT_NO = S.NEW_OUT_FLT_NO_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.OUT_FLT_SFX_CD = S.NEW_OUT_FLT_SFX_CD
+          AND T.OUT_DEP_FLTDT = S.NEW_OUT_DEP_FLTDT_DATE -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.OUT_DEP_FLTTM = S.NEW_OUT_DEP_FLTTM_DATE -- TODO(SME) SEM-06/DTX-10 + SEM-04: _TTM time slot vs _DATE-suffixed staging value; confirm type + timezone.
+          AND T.OUT_ARR_FLTDT = S.NEW_OUT_ARR_FLTDT_DATE -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.OUT_PAX_TML_CD = S.NEW_OUT_PAX_TML_CD
+          AND T.OUT_GROUND_ACY_CD = S.NEW_OUT_GROUND_ACY_CD
+          AND T.OUT_SERVICE_TYP = S.NEW_OUT_SERVICE_TYP
+          AND T.OUT_FLT_LEG_SEQ_NO = S.NEW_OUT_FLT_LEG_SEQ_NO
+          AND T.AIRCRAFT_OWNER_CD = S.NEW_AIRCRAFT_OWNER_CD
+          AND T.CARRIER_AC_TYP = S.NEW_CARRIER_AC_TYP
+          AND T.MIDNIGHT_QTY = S.NEW_MIDNIGHT_QTY_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.BUFFER_DUR = S.NEW_BUFFER_DUR_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.STD_WORKING_DUR = S.NEW_STD_WORKING_DUR_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.TOW_TIME_DUR = S.NEW_TOW_TIME_DUR_SMALLINT -- TODO(SME) SEM-06/DTX-10: type-suffixed staging alias vs unknown BASE column type.
+          AND T.FIXED_LINK_RSN_TXT = S.NEW_FIXED_LINK_RSN_TXT
+          AND T.LINK_EFFECTIVE_DT = S.NEW_LINK_EFFECTIVE_DT
+          AND T.LINK_EXPIRY_DT = S.NEW_LINK_EXPIRY_DT
+          AND T.CURRENT_REC_IND = S.NEW_CURRENT_REC_IND
+    );

@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "github.copilot",
+    "github.copilot-chat",
+    "ms-python.python"
+  ],
+  "// note": "snowflake.snowflake-vsc is OPTIONAL — only needed to EXECUTE the fixed SQL against a live Snowflake account. The pipeline's validation uses sqlglot (offline) and does not require it."
+}

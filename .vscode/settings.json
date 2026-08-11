@@ -1,0 +1,35 @@
+{
+  "// ---": "snowflake2snowflake ICM \u2014 Copilot + validator wiring",
+  "chat.promptFiles": true,
+  "chat.promptFilesLocations": {
+    ".github/prompts": true
+  },
+  "chat.agentFilesLocations": {
+    ".github/agents": true
+  },
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "github.copilot.chat.codeGeneration.instructions": [
+    {
+      "file": ".github/copilot-instructions.md"
+    }
+  ],
+  "github.copilot.enable": {
+    "*": true,
+    "sql": true,
+    "markdown": true,
+    "plaintext": false
+  },
+  "files.associations": {
+    "*.bteq": "sql"
+  },
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "[sql]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.rulers": [
+      100
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+# transient pointers to the in-flight run
+.current_run
+.current_start

@@ -1,0 +1,128 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "S2S: Validate fixed SQL",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "04_validate/validate.py",
+        "${input:fixedFile}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+  "label": "S2S: Archive stage outputs — reset ALL",
+  "type": "shell",
+  "command": "python3",
+  "args": ["05_report/archive_outputs.py"],
+  "problemMatcher": []
+},
+{
+  "label": "S2S: Archive stage outputs — one unit",
+  "type": "shell",
+  "command": "python3",
+  "args": ["05_report/archive_outputs.py", "${input:archiveBase}"],
+  "problemMatcher": []
+},
+    {
+      "label": "S2S: Validate buggy input (control \u2014 expect FAIL)",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "04_validate/validate.py",
+        "${input:inputFile}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "S2S: Annotate SQL with semantic comments",
+      "detail": "Embed the (editable) semantic explanation into <name>_final.sql as comments",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "06_explain/annotate.py",
+        "--sql",
+        "${input:fixedFile}",
+        "--md",
+        "${input:semanticMd}",
+        "--out",
+        "${input:finalFile}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "S2S: Refresh interactive report",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "05_report/build_report.py"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "detail": "Regenerate report.html from all stage outputs (run after remediation)"
+    },
+    {
+      "label": "S2S: Setup \u2014 install deps (run once)",
+      "detail": "Idempotent: installs sqlglot only if missing, then exits instantly on later runs. No more reinstalling every run.",
+      "type": "shell",
+      "command": "python3",
+      "args": [
+        "bootstrap.py"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "fixedFile",
+      "type": "promptString",
+      "description": "Path to the PURE fixed SQL file (base)",
+      "default": "03_fix/output/ins_wrk_dc_priority_snowflake_fixed.sql"
+    },
+    {
+      "id": "finalFile",
+      "type": "promptString",
+      "description": "Path to write the annotated final SQL",
+      "default": "03_fix/output/ins_wrk_dc_priority_snowflake_final.sql"
+    },
+    {
+      "id": "semanticMd",
+      "type": "promptString",
+      "description": "Path to the editable semantic explanation markdown",
+      "default": "06_explain/output/semantic_ins_wrk_dc_priority.md"
+    },
+    {
+      "id": "inputFile",
+      "type": "promptString",
+      "description": "Path to the buggy input SQL file",
+      "default": "00_input/ins_wrk_dc_priority_snowflake.sql"
+    },
+    { "id": "archiveBase", 
+      "type": "promptString", 
+      "description": "Unit base name to archive (e.g. SFIssueSET)" }
+  ]
+}
