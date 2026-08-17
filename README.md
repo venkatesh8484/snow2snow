@@ -1,4 +1,4 @@
-# Snowflake → Snowflake Remediation Pipeline (ICM-style)
+# Snowflake → Snowflake Remediation Pipeline
 
 An [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021) pipeline —
 a sibling to `../teradata2snowflake/`. Same idea (numbered folders = stages,
@@ -52,7 +52,7 @@ snowflake2snowflake/
 └── .vscode/         VS Code tasks, settings, recommended extensions
 ```
 
-## The ICM solution runs in GitHub Copilot / VS Code
+## The generic framework solution runs in GitHub Copilot / VS Code
 
 This repo is set up to be driven from **GitHub Copilot Chat in VS Code** — no
 bespoke app, no redeploy. Two ways to run it, both defined under `.github/`:
