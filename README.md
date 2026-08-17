@@ -1,9 +1,6 @@
 # Snowflake → Snowflake Remediation Pipeline
 
-An [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021) pipeline —
-a sibling to `../teradata2snowflake/`. Same idea (numbered folders = stages,
-markdown carries the prompts and rules, a local script does mechanical checks),
-but a **different job**.
+A generic pipeline with numbered folders, markdown carries the prompts and rules, a local script does mechanical checks.
 
 ## What problem this solves
 
