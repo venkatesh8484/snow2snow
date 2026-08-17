@@ -102,7 +102,7 @@ and the validator/annotator run as *VS Code tasks*.
    ```
 
    `.github/copilot-instructions.md` is loaded automatically on every Copilot
-   request, so the agent always knows the ICM rules and reads `02_rules/`
+   request, so the agent always knows the rules and reads `02_rules/`
    before fixing. Review the output after each stage.
 5. Run **Terminal → Run Task → S2S: Validate fixed SQL** (or the task auto-runs
    from `/04-validate`) to get the mechanical PASS/FAIL.
